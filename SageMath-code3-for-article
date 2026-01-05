@@ -1,1 +1,126 @@
+# SageMath-code3-for-article
 
+precisione_bit = 4000
+phi = (1 + sqrt(5)) / 2 
+
+A = 38
+B = phi
+M = 48 * (10**46)
+soglia_denominatore = 6 * M
+soglia_denominatore_sage = Integer(soglia_denominatore)
+
+gamma_sym = log(2) / log(phi)
+gamma_approx = gamma_sym.n(prec=precisione_bit)
+
+min_diff_nm = 0 
+max_diff_nm = 247
+min_diff_nl = 0  
+max_diff_nl = 254
+
+max_candidates_q = 10 # Controlliamo i primi 10 q candidati
+
+
+def distance_from_nearest_integer(x):
+    """Calcola la distanza di x dall'intero più vicino, ||x||."""
+    x = x.n(prec=precisione_bit)
+    frac_part = x - floor(x)
+    return min(frac_part, 1 - frac_part)
+
+cf = continued_fraction(gamma_approx)
+convergenti = cf.convergents()
+q_candidates = []
+q_start_index = -1
+max_iter_q = 200 
+
+print(f"--- FASE 1: Ricerca Denominatore q > 6M ({soglia_denominatore_sage}) ---")
+
+for i in range(max_iter_q):
+    try:
+        q = convergenti[i].denominator()
+        if q > soglia_denominatore_sage:
+            q_start_index = i
+            break
+    except Exception:
+        break
+
+if q_start_index == -1:
+    print("ERRORE: Nessun denominatore q trovato con q > soglia.")
+else:
+    for i in range(q_start_index, q_start_index + max_candidates_q):
+          try:
+            q_candidates.append((i, convergenti[i].denominator()))
+          except IndexError:
+            break
+    
+    max_bound_min = 0 
+    q_max_bound_min = 0
+    max_diff_nm_result = 0
+    max_diff_nl_result = 0
+    
+    print(f"\n--- FASE 2: Calcolo Max(Min(Bound)) per n-m da {min_diff_nm} a {max_diff_nm} e n-l da {min_diff_nl} a {max_diff_nl} ---")
+    print("n-m | n-l | Indice q | Denominatore q | ||eta*q|| | ||gamma*q|| | Epsilon | BOUND MINIMO")
+    print("---------------------------------------------------------------------------------------------------------------------------------------------------------------")
+
+    for diff_nm in range(min_diff_nm, max_diff_nm + 1):
+        # Ciclo interno su n-l (diff_nl) con range definito
+        for diff_nl in range(min_diff_nl, max_diff_nl + 1):
+
+            try:
+                denominatore_eta = 1 + phi^(-2*diff_nm) + phi^(-2*diff_nl)
+                nuovo_eta_sym = log(5 / denominatore_eta) / log (phi)
+                nuovo_eta_approx = nuovo_eta_sym.n(prec=precisione_bit)
+            except Exception:
+                continue
+
+            min_bound_for_pair = Infinity 
+            q_min_for_pair = None
+            epsilon_min_for_pair = None
+            eta_min_for_pair = None
+            gamma_min_for_pair = None
+            indice_q_min_for_pair = None
+
+            for indice_q, q_trovato in q_candidates:
+                
+                distance_gamma = distance_from_nearest_integer(gamma_approx * q_trovato)
+                distance_eta = distance_from_nearest_integer(nuovo_eta_approx * q_trovato)
+                epsilon = distance_eta - M * distance_gamma
+                
+                if epsilon > 0:
+                    # Calcolo Finale: log(Aq/epsilon) / log(B)
+                    argomento_log_finale = (A * q_trovato) / epsilon
+                    risultato_finale = (log(argomento_log_finale) / log(B)).n(digits=10)
+
+                    if risultato_finale < min_bound_for_pair:
+                        min_bound_for_pair = risultato_finale
+                        q_min_for_pair = q_trovato
+                        epsilon_min_for_pair = epsilon
+                        eta_min_for_pair = distance_eta
+                        gamma_min_for_pair = distance_gamma
+                        indice_q_min_for_pair = indice_q
+
+
+            if min_bound_for_pair != Infinity:
+
+                if min_bound_for_pair > max_bound_min:
+                    max_bound_min = min_bound_for_pair
+                    q_max_bound_min = q_min_for_pair
+                    max_diff_nm_result = diff_nm
+                    max_diff_nl_result = diff_nl 
+
+                print(f"{diff_nm:3} | {diff_nl:3} | {indice_q_min_for_pair:8} | {q_min_for_pair:14} | {eta_min_for_pair.n(digits=3):9} | {gamma_min_for_pair.n(digits=3):9} | {epsilon_min_for_pair.n(digits=3):9} | {min_bound_for_pair}")
+            else:
+                print(f"{diff_nm:3} | {diff_nl:3} | - | - | - | - | - | FALLITO (epsilon <= 0 per tutti i q candidati)")
+
+
+    
+    print("\n--------------------------------------------------------------")
+    if max_bound_min > 0:
+        print("RISULTATO FINALE (Massimo Bound tra tutti i minimi):")
+        print(f"VALORE MAX(MIN) TROVATO: {max_bound_min.n(digits=10)}")
+        print(f"ARROTONDAMENTO PER ECCESSO (Bound definitivo): {max_bound_min.ceil()}")
+        print(f"GENERATO PER n-m = {max_diff_nm_result} e n-l = {max_diff_nl_result}")
+        print(f"DENOMINATORE q CHE HA GENERATO IL BOUND MASSIMO TRA I MINIMI:")
+        print(f"{q_max_bound_min}")
+    else:
+        print("Il metodo di riduzione non ha trovato un bound valido (epsilon <= 0) tra i candidati testati.")
+    print("--------------------------------------------------------------")
